@@ -1,0 +1,21 @@
+{
+  "type": "datasource",
+  "name": "huya",
+  "id": "huya",
+
+  "metrics": true,
+  "defaultMatchFormat": "pipe",
+  "annotations": true,
+  "alerting": true,
+
+  "info": {
+    "author": {
+      "name": "chenyi1",
+      "url": "http://www.huya.com"
+    },
+    "logos": {
+      "small": "img/opentsdb_logo.png",
+      "large": "img/opentsdb_logo.png"
+    }
+  }
+}
