@@ -69,21 +69,23 @@ function (angular, _, dateMath) {
         // console.log('metricToTargetMapping', metricToTargetMapping);
         var result = [];
         _.each(response.data, function(metricData, index) {
-          if (!metricData.metric.endsWith('_avg')) {
+          index = qsIndex[metricToTargetMapping[index]];
+          var target = options.targets[index];
+          var postfix = target.useSumDivCnt ? '_sum' : '_avg';
+          if (!metricData.metric.endsWith(postfix)) {
             return;
           }
-          index = qsIndex[metricToTargetMapping[index]];
           this._saveTagKeys(metricData);
 
           _.each(response.data, function(refData, refIndex) {
             if (refData.metric.endsWith('_cnt') && qsIndex[metricToTargetMapping[refIndex]] === index
                 && _.isEqual(refData.tags, metricData.tags)) {
-              processMetricData(metricData, refData, options.targets[index], options, this.tsdbResolution);
+              processMetricData(metricData, refData, target, options, this.tsdbResolution);
               return false;
             }
           }.bind(this));
 
-          result.push(transformMetricData(metricData, groupByTags, options.targets[index], options, this.tsdbResolution));
+          result.push(transformMetricData(metricData, groupByTags, target, options, this.tsdbResolution));
         }.bind(this));
         // console.log('result', result);
         return { data: result };
@@ -185,6 +187,7 @@ function (angular, _, dateMath) {
       });
 
       this.tagKeys[metricData.metric] = tagKeys;
+      this.tagKeys[metricData.metric.replace(/_sum$|_cnt$/, '_avg')] = tagKeys;
     };
 
     this._performSuggestQuery = function(query, type) {
@@ -260,7 +263,6 @@ function (angular, _, dateMath) {
             }
           });
         });
-        console.log(tagvs);
         return tagvs;
       });
     };
@@ -283,7 +285,6 @@ function (angular, _, dateMath) {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       }).then(function(result) {
-        console.log(result);
         if (result.data && _.isObject(result.data.data) && !_.isArray(result.data.data)) {
           return _.map(result.data.data, function(value, key) {
             return {
@@ -425,7 +426,15 @@ function (angular, _, dateMath) {
       var dps = {};
       var threshold = templateSrv.replace(target.threshold, options.scopedVars, 'pipe');
 
-      if (!target.disableDownsampling) {
+      if (target.useSumDivCnt) {
+        _.each(metricData.dps, function(value, key) {
+          if (refData.dps[key] >= threshold) {
+            dps[key] = value / refData.dps[key];
+          } else {
+            dps[key] = null;
+          }
+        });
+      } else if (!target.disableDownsampling) {
         var interval = templateSrv.replace(target.downsampleInterval || options.interval);
         if (interval.match(/\.[0-9]+s/)) {
           interval = Math.round(parseFloat(interval)*1000) + "ms";
@@ -549,8 +558,23 @@ function (angular, _, dateMath) {
         query.explicitTags = true;
       }
 
+      if (target.useSumDivCnt) {
+        query.metric = query.metric.slice(0, -4) + '_sum';
+        query.aggregator = "sum";
+
+        if (!target.disableDownsampling) {
+          var interval =  templateSrv.replace(target.downsampleInterval || options.interval);
+
+          if (interval.match(/\.[0-9]+s/)) {
+            interval = parseFloat(interval)*1000 + "ms";
+          }
+
+          query.downsample = interval + "-" + "sum";
+        }
+      }
+
       var cntQuery = angular.copy(query);
-      cntQuery.metric = cntQuery.metric.replace(/_avg$/, '_cnt');
+      cntQuery.metric = cntQuery.metric.slice(0, -4) + '_cnt';
       cntQuery.aggregator = "sum";
 
       return [query, cntQuery];
