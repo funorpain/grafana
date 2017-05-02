@@ -426,7 +426,7 @@ function (angular, _, dateMath) {
 
     function processMetricData(metricData, refData, target, options, tsdbResolution) {
       var dps = {};
-      var threshold = templateSrv.replace(target.threshold, options.scopedVars, 'pipe');
+      var threshold = target.threshold ? templateSrv.replace(target.threshold, options.scopedVars, 'pipe') : 0;
 
       if (target.useSumDivCnt) {
         _.each(metricData.dps, function(value, key) {
