@@ -75,6 +75,9 @@ function (angular, _, dateMath) {
           if (!metricData.metric.endsWith(postfix)) {
             return;
           }
+          if (postfix === '_sum') {
+            metricData.metric = metricData.metric.slice(0, -4) + '_avg';
+          }
           this._saveTagKeys(metricData);
 
           _.each(response.data, function(refData, refIndex) {
@@ -187,7 +190,6 @@ function (angular, _, dateMath) {
       });
 
       this.tagKeys[metricData.metric] = tagKeys;
-      this.tagKeys[metricData.metric.replace(/_sum$|_cnt$/, '_avg')] = tagKeys;
     };
 
     this._performSuggestQuery = function(query, type) {
