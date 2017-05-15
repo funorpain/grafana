@@ -72,16 +72,14 @@ function (angular, _, dateMath) {
           index = qsIndex[metricToTargetMapping[index]];
           var target = options.targets[index];
           var postfix = target.useSumDivCnt ? '_sum' : '_avg';
-          if (!metricData.metric.endsWith(postfix)) {
+          if (!metricData.metric.endsWith('_cnt')) {
             return;
           }
-          if (postfix === '_sum') {
-            metricData.metric = metricData.metric.slice(0, -4) + '_avg';
-          }
+          metricData.metric = metricData.metric.slice(0, -4) + '_avg';
           this._saveTagKeys(metricData);
 
           _.each(response.data, function(refData, refIndex) {
-            if (refData.metric.endsWith('_cnt') && qsIndex[metricToTargetMapping[refIndex]] === index
+            if (refData.metric.endsWith(postfix) && qsIndex[metricToTargetMapping[refIndex]] === index
                 && _.isEqual(refData.tags, metricData.tags)) {
               processMetricData(metricData, refData, target, options, this.tsdbResolution);
               return false;
@@ -430,8 +428,8 @@ function (angular, _, dateMath) {
 
       if (target.useSumDivCnt) {
         _.each(metricData.dps, function(value, key) {
-          if (refData.dps[key] >= threshold) {
-            dps[key] = value / refData.dps[key];
+          if (value >= threshold) {
+            dps[key] = refData.dps[key] / value;
           } else {
             dps[key] = null;
           }
@@ -449,15 +447,14 @@ function (angular, _, dateMath) {
         var sums = {};
         var cnts = {};
         _.each(metricData.dps, function(value, key) {
-          var cnt = refData.dps[key];
-          if (cnt > 0) {
+          if (value > 0) {
             var base = key - (key % interval);
             if (!cnts[base]) {
               cnts[base] = 0;
               sums[base] = 0;
             }
-            sums[base] += value * cnt;
-            cnts[base] += cnt;
+            sums[base] += refData.dps[key] * value;
+            cnts[base] += value;
           }
         });
 
@@ -471,8 +468,8 @@ function (angular, _, dateMath) {
         });
       } else {
         _.each(metricData.dps, function(value, key) {
-          if (refData.dps[key] >= threshold) {
-            dps[key] = value;
+          if (value >= threshold) {
+            dps[key] = refData.dps[key];
           } else {
             dps[key] = null;
           }
