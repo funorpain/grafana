@@ -78,13 +78,29 @@ function (angular, _, dateMath) {
           metricData.metric = metricData.metric.slice(0, -4) + '_avg';
           this._saveTagKeys(metricData);
 
+          var valid = false;
           _.each(response.data, function(refData, refIndex) {
             if (refData.metric.endsWith(postfix) && qsIndex[metricToTargetMapping[refIndex]] === index
                 && _.isEqual(refData.tags, metricData.tags)) {
               processMetricData(metricData, refData, target, options, this.tsdbResolution);
+              valid = true;
               return false;
             }
           }.bind(this));
+          if (!valid) {
+            return;
+          }
+
+          var hasData = false;
+          _.each(metricData.dps, function(value) {
+            if (value !== null) {
+              hasData = true;
+              return false;
+            }
+          });
+          if (!hasData) {
+            return;
+          }
 
           result.push(transformMetricData(metricData, groupByTags, target, options, this.tsdbResolution));
         }.bind(this));
@@ -428,7 +444,7 @@ function (angular, _, dateMath) {
 
       if (target.useSumDivCnt) {
         _.each(metricData.dps, function(value, key) {
-          if (value >= threshold) {
+          if (value >= threshold && value > 0 && refData.dps[key] !== undefined) {
             dps[key] = refData.dps[key] / value;
           } else {
             dps[key] = null;
@@ -447,7 +463,7 @@ function (angular, _, dateMath) {
         var sums = {};
         var cnts = {};
         _.each(metricData.dps, function(value, key) {
-          if (value > 0) {
+          if (value > 0 && refData.dps[key] !== undefined) {
             var base = key - (key % interval);
             if (!cnts[base]) {
               cnts[base] = 0;
@@ -468,7 +484,7 @@ function (angular, _, dateMath) {
         });
       } else {
         _.each(metricData.dps, function(value, key) {
-          if (value >= threshold) {
+          if (value >= threshold && value > 0 && refData.dps[key] !== undefined) {
             dps[key] = refData.dps[key];
           } else {
             dps[key] = null;
