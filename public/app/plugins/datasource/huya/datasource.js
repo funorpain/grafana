@@ -33,8 +33,13 @@ function (angular, _, dateMath) {
         var query = convertTargetToQuery(target, options);
         if (query) {
           _.each(query, function(item) {
-            qs.push(item);
-            qsIndex.push(index);
+            var pos = _.findIndex(qs, item);
+            if (pos === -1) {
+              qs.push(item);
+              qsIndex.push([index]);
+            } else {
+              qsIndex[pos].push(index);
+            }
           });
         }
       });
@@ -69,40 +74,51 @@ function (angular, _, dateMath) {
         // console.log('metricToTargetMapping', metricToTargetMapping);
         var result = [];
         _.each(response.data, function(metricData, index) {
-          index = qsIndex[metricToTargetMapping[index]];
-          var target = options.targets[index];
-          var postfix = target.useSumDivCnt ? '_sum' : '_avg';
-          if (!metricData.metric.endsWith('_cnt')) {
-            return;
-          }
-          metricData.metric = metricData.metric.slice(0, -4) + '_avg';
-          this._saveTagKeys(metricData);
+          var indexes = qsIndex[metricToTargetMapping[index]];
+          _.each(indexes, function(index) {
+            var target = options.targets[index],
+                metric = templateSrv.replace(target.metric, options.scopedVars, 'pipe'),
+                avg = metric.endsWith('_avg');
 
-          var valid = false;
-          _.each(response.data, function(refData, refIndex) {
-            if (refData.metric.endsWith(postfix) && qsIndex[metricToTargetMapping[refIndex]] === index
-                && _.isEqual(refData.tags, metricData.tags)) {
-              processMetricData(metricData, refData, target, options, this.tsdbResolution);
-              valid = true;
-              return false;
+            if (!avg) {
+              this._saveTagKeys(metricData);
+              result.push(transformMetricData(metricData, groupByTags, target, options, this.tsdbResolution));
+              return;
             }
+
+            if (!metricData.metric.endsWith('_cnt')) {
+              return;
+            }
+            var avgData = _.clone(metricData);
+            avgData.metric = avgData.metric.slice(0, -4) + '_avg';
+            this._saveTagKeys(avgData);
+
+            var valid = false;
+            _.each(response.data, function(refData, refIndex) {
+              if (refData.metric.endsWith('_sum') && qsIndex[metricToTargetMapping[refIndex]].indexOf(index) !== -1
+                  && _.isEqual(refData.tags, avgData.tags)) {
+                processMetricData(avgData, refData, target, options);
+                valid = true;
+                return false;
+              }
+            }.bind(this));
+            if (!valid) {
+              return;
+            }
+
+            var hasData = false;
+            _.each(avgData.dps, function(value) {
+              if (value !== null) {
+                hasData = true;
+                return false;
+              }
+            });
+            if (!hasData) {
+              return;
+            }
+
+            result.push(transformMetricData(avgData, groupByTags, target, options, this.tsdbResolution));
           }.bind(this));
-          if (!valid) {
-            return;
-          }
-
-          var hasData = false;
-          _.each(metricData.dps, function(value) {
-            if (value !== null) {
-              hasData = true;
-              return false;
-            }
-          });
-          if (!hasData) {
-            return;
-          }
-
-          result.push(transformMetricData(metricData, groupByTags, target, options, this.tsdbResolution));
         }.bind(this));
         // console.log('result', result);
         return { data: result };
@@ -418,79 +434,17 @@ function (angular, _, dateMath) {
       return filterTypesPromise;
     };
 
-    function transformInterval(interval) {
-      var m = /^(\d+)(ms|s|m|h|d)$/.exec(interval);
-      if (m) {
-        var time = parseInt(m[1]);
-        switch (m[2]) {
-          case 'ms':
-            return time;
-          case 's':
-            return time * 1000;
-          case 'm':
-            return time * 1000 * 60;
-          case 'h':
-            return time * 1000 * 60 * 60;
-          case 'd':
-            return time * 1000 * 60 * 60 * 24;
-        }
-      }
-      return 0;
-    }
-
-    function processMetricData(metricData, refData, target, options, tsdbResolution) {
+    function processMetricData(metricData, refData, target, options) {
       var dps = {};
       var threshold = target.threshold ? templateSrv.replace(target.threshold, options.scopedVars, 'pipe') : 0;
 
-      if (target.useSumDivCnt) {
-        _.each(metricData.dps, function(value, key) {
-          if (value >= threshold && value > 0 && refData.dps[key] !== undefined) {
-            dps[key] = refData.dps[key] / value;
-          } else {
-            dps[key] = null;
-          }
-        });
-      } else if (!target.disableDownsampling) {
-        var interval = templateSrv.replace(target.downsampleInterval || options.interval);
-        if (interval.match(/\.[0-9]+s/)) {
-          interval = Math.round(parseFloat(interval)*1000) + "ms";
+      _.each(metricData.dps, function(value, key) {
+        if (value >= threshold && value > 0) {
+          dps[key] = refData.dps[key] !== undefined ? refData.dps[key] / value : 0;
+        } else {
+          dps[key] = null;
         }
-        interval = transformInterval(interval);
-        if (tsdbResolution !== 2) {
-          interval = Math.max(Math.round(interval / 1000), 1);
-        }
-
-        var sums = {};
-        var cnts = {};
-        _.each(metricData.dps, function(value, key) {
-          if (value > 0 && refData.dps[key] !== undefined) {
-            var base = key - (key % interval);
-            if (!cnts[base]) {
-              cnts[base] = 0;
-              sums[base] = 0;
-            }
-            sums[base] += refData.dps[key] * value;
-            cnts[base] += value;
-          }
-        });
-
-        _.each(sums, function(value, key) {
-          // console.log(key + ' ' + value + ' ' + cnts[key]);
-          if (cnts[key] >= threshold) {
-            dps[key] = value / cnts[key];
-          } else {
-            dps[key] = null;
-          }
-        });
-      } else {
-        _.each(metricData.dps, function(value, key) {
-          if (value >= threshold && value > 0 && refData.dps[key] !== undefined) {
-            dps[key] = refData.dps[key];
-          } else {
-            dps[key] = null;
-          }
-        });
-      }
+      });
 
       metricData.dps = dps;
     }
@@ -546,12 +500,14 @@ function (angular, _, dateMath) {
 
       var query = {
         metric: templateSrv.replace(target.metric, options.scopedVars, 'pipe'),
-        aggregator: "avg"
+        aggregator: "sum"
       };
 
-      if (!query.metric.endsWith("_avg")) {
+      if (!query.metric.match(/_(sum|cnt|avg)$/)) {
         return null;
       }
+
+      var avg = query.metric.endsWith('_avg');
 
       if (target.filters && target.filters.length > 0) {
         query.filters = angular.copy(target.filters);
@@ -573,24 +529,24 @@ function (angular, _, dateMath) {
         query.explicitTags = true;
       }
 
-      if (target.useSumDivCnt) {
-        query.metric = query.metric.slice(0, -4) + '_sum';
-        query.aggregator = "sum";
+      if (!target.disableDownsampling) {
+        var interval =  templateSrv.replace(target.downsampleInterval || options.interval);
 
-        if (!target.disableDownsampling) {
-          var interval =  templateSrv.replace(target.downsampleInterval || options.interval);
-
-          if (interval.match(/\.[0-9]+s/)) {
-            interval = parseFloat(interval)*1000 + "ms";
-          }
-
-          query.downsample = interval + "-" + "sum";
+        if (interval.match(/\.[0-9]+s/)) {
+          interval = parseFloat(interval)*1000 + "ms";
         }
+
+        query.downsample = interval + "-" + "sum";
       }
+
+      if (!avg) {
+        return [query];
+      }
+
+      query.metric = query.metric.slice(0, -4) + '_sum';
 
       var cntQuery = angular.copy(query);
       cntQuery.metric = cntQuery.metric.slice(0, -4) + '_cnt';
-      cntQuery.aggregator = "sum";
 
       return [query, cntQuery];
     }

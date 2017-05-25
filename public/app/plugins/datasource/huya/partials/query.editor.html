@@ -1,6 +1,6 @@
 <query-editor-row query-ctrl="ctrl" can-collapse="false">
 	<div class="gf-form-inline">
-		<div class="gf-form max-width-25">
+		<div class="gf-form gf-form--grow">
 			<label class="gf-form-label query-keyword width-8">
 				Metric
 				<label class="gf-form-label" bs-tooltip="ctrl.errors.metric" style="color: rgb(229, 189, 28)" ng-show="ctrl.errors.metric">
@@ -26,13 +26,6 @@
 								data-min-length=0 data-items=100
 								ng-blur="ctrl.targetBlur()"></input>
 			</div>
-
-			<gf-form-switch class="gf-form"
-											label="Use sum/cnt"
-	                    label-class="query-keyword"
-											checked="ctrl.target.useSumDivCnt"
-											on-change="ctrl.targetBlur()">
-			</gf-form-switch>
 
 			<div class="gf-form gf-form--grow">
 				<div class="gf-form-label gf-form-label--grow"></div>
