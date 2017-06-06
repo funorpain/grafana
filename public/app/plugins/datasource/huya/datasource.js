@@ -33,7 +33,7 @@ function (angular, _, dateMath) {
         var query = convertTargetToQuery(target, options);
         if (query) {
           _.each(query, function(item) {
-            var pos = _.findIndex(qs, item);
+            var pos = _.indexOf(qs, item);
             if (pos === -1) {
               qs.push(item);
               qsIndex.push([index]);
