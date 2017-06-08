@@ -33,7 +33,13 @@ function (angular, _, dateMath) {
         var query = convertTargetToQuery(target, options);
         if (query) {
           _.each(query, function(item) {
-            var pos = _.indexOf(qs, item);
+            var pos = -1;
+            _.each(qs, function(val, i) {
+              if (_.isEqual(val, item)) {
+                pos = i;
+                return false;
+              }
+            });
             if (pos === -1) {
               qs.push(item);
               qsIndex.push([index]);
@@ -93,18 +99,17 @@ function (angular, _, dateMath) {
             avgData.metric = avgData.metric.slice(0, -4) + '_avg';
             this._saveTagKeys(avgData);
 
-            var valid = false;
+            var sumList = [];
             _.each(response.data, function(refData, refIndex) {
               if (refData.metric.endsWith('_sum') && qsIndex[metricToTargetMapping[refIndex]].indexOf(index) !== -1
-                  && _.isEqual(refData.tags, avgData.tags)) {
-                processMetricData(avgData, refData, target, options);
-                valid = true;
-                return false;
+                  && this.isSubsetOfTags(avgData.tags, refData.tags)) {
+                sumList.push(refData);
               }
             }.bind(this));
-            if (!valid) {
+            if (sumList.length === 0) {
               return;
             }
+            processMetricData(avgData, sumList, target, options);
 
             var hasData = false;
             _.each(avgData.dps, function(value) {
@@ -123,6 +128,15 @@ function (angular, _, dateMath) {
         // console.log('result', result);
         return { data: result };
       }.bind(this));
+    };
+
+    this.isSubsetOfTags = function(a, b) {
+      for (var k in a) {
+        if (!(k in b)) {
+          return false;
+        }
+      }
+      return true;
     };
 
     this.annotationQuery = function(options) {
@@ -440,7 +454,14 @@ function (angular, _, dateMath) {
 
       _.each(metricData.dps, function(value, key) {
         if (value >= threshold && value > 0) {
-          dps[key] = refData.dps[key] !== undefined ? refData.dps[key] / value : 0;
+          var sum = 0;
+          for (var i = 0, n = refData.length; i < n; i++) {
+            var v = refData[i].dps[key];
+            if (v) {
+              sum += v;
+            }
+          }
+          dps[key] = sum / value;
         } else {
           dps[key] = null;
         }
