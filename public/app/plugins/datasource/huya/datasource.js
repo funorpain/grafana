@@ -132,7 +132,7 @@ function (angular, _, dateMath) {
 
     this.isSubsetOfTags = function(a, b) {
       for (var k in a) {
-        if (!(k in b)) {
+        if (a[k] !== b[k]) {
           return false;
         }
       }
