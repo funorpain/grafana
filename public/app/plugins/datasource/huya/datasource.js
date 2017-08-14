@@ -558,6 +558,8 @@ function (angular, _, dateMath) {
         }
 
         query.downsample = interval + "-" + "sum";
+
+        query.downsample += "-" + "null";
       }
 
       if (!avg) {
