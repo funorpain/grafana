@@ -535,6 +535,10 @@ function (angular, _, dateMath) {
         if (query.filters){
           for (var filter_key in query.filters) {
             query.filters[filter_key].filter = templateSrv.replace(query.filters[filter_key].filter, options.scopedVars, 'pipe');
+            // replace literal_or(*) to wildcard(*)
+            if (query.filters[filter_key].filter === '*' && query.filters[filter_key].type === 'literal_or') {
+              query.filters[filter_key].type = 'wildcard';
+            }
           }
         }
       } else {
